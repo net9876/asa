@@ -226,3 +226,45 @@ output "resource_group" { value = azurerm_resource_group.asa.name }
 output "scanner_identity_principal_id" { value = azurerm_user_assigned_identity.asa.principal_id }
 output "findings_storage_account" { value = azurerm_storage_account.findings.name }
 output "reader_scopes_granted" { value = var.reader_scopes }
+
+# ---- ASA secrets (Key Vault) --------------------------------------------------------------
+# One vault for ALL ASA secrets (e.g. the Grafana metrics-push token). No secret VALUES are ever
+# created by Terraform: the owner uploads them with Read-Host -AsSecureString, so they never reach
+# code, state or logs. RBAC mode only (no access policies).
+variable "enable_keyvault" {
+  type        = bool
+  default     = false
+  description = "ASA's own Key Vault (Standard, RBAC, ~cents/month). Scanner identity gets read-only Secrets User; the deploying owner gets Secrets Officer to upload values."
+}
+
+resource "azurerm_key_vault" "asa" {
+  count                         = var.enable_keyvault ? 1 : 0
+  name                          = "kv-${var.name}-${local.suffix}"
+  resource_group_name           = azurerm_resource_group.asa.name
+  location                      = azurerm_resource_group.asa.location
+  tenant_id                     = data.azurerm_client_config.current.tenant_id
+  sku_name                      = "standard"
+  rbac_authorization_enabled    = true
+  soft_delete_retention_days    = 7
+  purge_protection_enabled      = false
+  public_network_access_enabled = true
+  tags                          = var.tags
+}
+
+resource "azurerm_role_assignment" "kv_scanner_reads" {
+  count                = var.enable_keyvault ? 1 : 0
+  scope                = azurerm_key_vault.asa[0].id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.asa.principal_id
+}
+
+resource "azurerm_role_assignment" "kv_owner_uploads" {
+  count                = var.enable_keyvault ? 1 : 0
+  scope                = azurerm_key_vault.asa[0].id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+output "key_vault_name" {
+  value = var.enable_keyvault ? azurerm_key_vault.asa[0].name : null
+}

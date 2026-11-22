@@ -32,6 +32,10 @@ variable "scheduler_bootstrap" {
   type    = string
   default = ""
 }
+variable "enable_keyvault" {
+  type    = bool
+  default = false
+}
 variable "scan_cron" {
   type    = string
   default = "0 6 * * *"
@@ -53,6 +57,7 @@ module "asa" {
   enable_scheduler     = var.enable_scheduler
   scheduler_bootstrap  = var.scheduler_bootstrap
   scan_cron            = var.scan_cron
+  enable_keyvault      = var.enable_keyvault
 }
 
 output "asa" {
