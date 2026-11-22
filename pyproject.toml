@@ -1,0 +1,34 @@
+[project]
+name = "asa"
+version = "0.1.0"
+description = "Autonomous Security Auditor: independent, read-only, evidence-based security auditing"
+requires-python = ">=3.11"
+dependencies = []  # stdlib only; live collection shells out to `az` (read-only GETs)
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.5"]
+
+[project.scripts]
+asa = "asa.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.mypy]
+strict = true
+files = ["src"]
+
+[tool.ruff]
+line-length = 130
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E702", "E701", "E501"]

@@ -1,0 +1,11 @@
+# Copy to config/minibank.local.toml (gitignored) and fill in. Read-only target description.
+[target]
+subscription_id = "00000000-0000-0000-0000-000000000000"
+resource_group = "rg-minibank-lab"
+# optional: Foundry (Cognitive Services) account resource id, for deployment/guardrail reads
+# foundry_account_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<name>"
+# foundry_deployments = ["gpt-4.1-mini"]   # optional: only assess deployments this target uses
+
+[options]
+declared_overlay = true   # add Copilot Studio / Power Platform nodes from design docs, labelled declared/unknown
+use_resource_graph = false  # true adds an Azure Resource Graph inventory cross-check (POST query, read-only)
