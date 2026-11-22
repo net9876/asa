@@ -4,7 +4,14 @@
 # State is separate from any audited workload (own backend key, ideally own subscription).
 terraform {
   required_version = ">= 1.10, < 2.0"
-  backend "local" { path = "../../../data/tfstate/asa-lab.tfstate" }
+  # Shared state store for all projects (RG common). Entra auth only; key isolated per project.
+  backend "azurerm" {
+    resource_group_name  = "common"
+    storage_account_name = "myterrasa"
+    container_name       = "tfstate"
+    key                  = "asa/terraform.tfstate"
+    use_azuread_auth     = true
+  }
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
