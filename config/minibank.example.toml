@@ -15,3 +15,11 @@ use_resource_graph = false  # true adds an Azure Resource Graph inventory cross-
 # enabled = true
 # endpoint = "https://<account>.cognitiveservices.azure.com/openai/v1"
 # deployment = "gpt-4.1-mini"
+
+# optional: read-only Power Platform / Entra collectors (need admin-read access; see docs/permissions-matrix.md)
+# [powerplatform]
+# environment_id = "<guid from the admin environment list>"
+# dataverse_url = "https://<org>.crm.dynamics.com"
+# [entra]
+# enabled = true
+# app_name_prefix = "MiniBank"

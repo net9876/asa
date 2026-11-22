@@ -84,13 +84,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.live:
         from asa.providers.azure_arm import collect_from_config
 
-        arm = None
+        arm, token_for = None, None
         if args.auth == "msi":
             from asa.providers.azure_arm import ReadOnlyArm
-            from asa.providers.msi import MsiArmRunner
+            from asa.providers.msi import MsiArmRunner, msi_token
 
-            arm = ReadOnlyArm(MsiArmRunner())
-        snap = collect_from_config(Path(args.config), arm)
+            arm, token_for = ReadOnlyArm(MsiArmRunner()), msi_token
+        snap = collect_from_config(Path(args.config), arm, token_for)
     else:
         snap = FIXTURES[args.fixture]()
     a = run(snap)

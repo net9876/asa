@@ -590,10 +590,10 @@ class AzureArmCollector:
             self._gap(area, "NOT_COLLECTED", "Overlay disabled; no collector for this area")
 
 
-def collect_from_config(path: Path, arm: ReadOnlyArm | None = None) -> Snapshot:
+def collect_from_config(path: Path, arm: ReadOnlyArm | None = None, token_for: Callable[[str], str] | None = None) -> Snapshot:
     cfg = tomllib.loads(path.read_text(encoding="utf-8"))
     t = cfg["target"]
-    return AzureArmCollector(
+    snap = AzureArmCollector(
         t["subscription_id"],
         t["resource_group"],
         t.get("foundry_account_id"),
@@ -602,3 +602,16 @@ def collect_from_config(path: Path, arm: ReadOnlyArm | None = None) -> Snapshot:
         use_resource_graph=cfg.get("options", {}).get("use_resource_graph", False),
         arm=arm,
     ).collect()
+    pp, en = cfg.get("powerplatform"), cfg.get("entra")
+    if (pp or en) and cfg.get("options", {}).get("declared_overlay", True):
+        from asa.providers.saas import SaaSClient, SaaSCollector, az_token
+
+        SaaSCollector(
+            snap,
+            SaaSClient(token_for or az_token),
+            environment_id=(pp or {}).get("environment_id"),
+            dataverse_url=(pp or {}).get("dataverse_url"),
+            entra=bool((en or {}).get("enabled", False)),
+            app_name_prefix=(en or {}).get("app_name_prefix"),
+        ).collect()
+    return snap

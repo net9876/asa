@@ -588,7 +588,130 @@ class UntrustedContent(Rule):
         return out
 
 
+
+# ---------------------------------------------------------------- AI trust path (Entra / Power Platform)
+def _propagation(n: Node, _: Snapshot) -> Verdict:
+    kind = _tri(n, "auth_kind")
+    if kind is None:
+        return unknown(f"{n.name}: connector authentication type not observed.")
+    if kind in ("oauth-delegated-user", "oauth-on-behalf-of"):
+        return passed(f"{n.name} calls the API with the signed-in user's token ({kind}); user identity is propagated.", auth_kind=kind)
+    return failed(
+        f"{n.name} authenticates with '{kind}': the API cannot attribute calls to the individual operator.", S.MEDIUM, auth_kind=kind
+    )
+
+
+USER_PROPAGATION = NodeRule(
+    _meta(
+        id="ASA-IAM-003",
+        version="1.0",
+        title="Connector propagates the end user's identity to the API",
+        severity=S.MEDIUM,
+        area="powerplatform.connectors",
+        impact="A shared connector identity hides who triggered an action and lets any app user act with the connector's rights.",
+        recommendation="Use delegated (per-user) OAuth on the connector; avoid shared API keys or a single service account.",
+        refs=(req("NIST SP 800-53 AC-2 / AU-3 attribution"), rec("OWASP Agentic AI: identity and privilege abuse")),
+    ),
+    selector("connector"),
+    _propagation,
+)
+
+
+def _app_secret(n: Node, _: Snapshot) -> Verdict:
+    count = _tri(n, "secret_count")
+    if count is None:
+        return unknown(f"{n.name}: credentials not observed.")
+    if count == 0:
+        return passed(f"{n.name} has no client secrets.", secret_count=0, cert_count=_tri(n, "cert_count"))
+    left = [d for d in (_tri(n, "secret_days_to_expiry") or []) if d is not None]
+    life = [d for d in (_tri(n, "secret_lifetime_days") or []) if d is not None]
+    if not left and not life:
+        return unknown(f"{n.name} has {count} client secret(s) but their validity dates were not returned.", secret_count=count)
+    if any(d < 0 for d in left):
+        return failed(f"{n.name} still holds an expired client secret.", S.LOW, secret_count=count, days_to_expiry=left)
+    if any(d > 365 for d in life):
+        return failed(f"{n.name} has a client secret valid for more than 12 months.", S.MEDIUM, secret_count=count, lifetime_days=life)
+    if any(d <= 30 for d in left):
+        return failed(f"{n.name} has a client secret expiring within 30 days (outage risk).", S.LOW, secret_count=count, days_to_expiry=left)
+    return passed(
+        f"{n.name} uses {count} client secret(s), lifetimes {life} days, expiring in {left} days (certificate/federated credential would be stronger).",
+        secret_count=count,
+        lifetime_days=life,
+        days_to_expiry=left,
+    )
+
+
+APP_SECRET = NodeRule(
+    _meta(
+        id="ASA-SEC-002",
+        version="1.0",
+        title="App registrations in the trust path hold no expired or long-lived client secrets",
+        severity=S.MEDIUM,
+        area="entra.oauth",
+        impact="Long-lived or forgotten secrets let anyone holding them impersonate the application.",
+        recommendation="Prefer certificates or federated credentials; keep secret lifetime short and rotate before expiry.",
+        refs=(rec("Microsoft identity platform: credential best practices"), req("CIS Azure Foundations: app credential hygiene")),
+    ),
+    selector("identity", kind="app-registration"),
+    _app_secret,
+)
+
+
+def _same_audience(a: str, b: str, snap: Snapshot) -> bool:
+    """Audiences may be written as the app's client id or as one of its identifier URIs: same app means equal."""
+    if a == b:
+        return True
+    for app in snap.nodes_of("identity"):
+        forms = {app.props.get("app_id"), *(app.props.get("identifier_uris") or [])}
+        if a in forms and b in forms:
+            return True
+    return False
+
+
+def _audience_match(n: Node, snap: Snapshot) -> Verdict:
+    aud = _tri(n, "resource_audience")
+    if aud is None:
+        return unknown(f"{n.name}: token audience requested by the connector not observed.")
+    cands = [snap.node(e.dst) for e in snap.edges if e.src == n.id and e.type == "invokes" and e.basis.value == "confirmed"]
+    apis: list[Node] = [a for a in cands if a is not None and a.props.get("kind") == "apim-api"]
+    if not apis:
+        return unknown(f"{n.name}: no confirmed connector-to-APIM link to compare audiences against.")
+    out: list[Verdict] = []
+    for a in apis:
+        got = a.props.get("audience")
+        if got is None:
+            out.append(unknown(f"{a.name}: validated audience not observed.", connector_audience=aud))
+        elif _same_audience(str(got), str(aud), snap):
+            out.append(passed(f"APIM '{a.name}' validates the same audience the connector requests.", audience=aud))
+        else:
+            out.append(failed(f"Connector requests audience {aud} but APIM '{a.name}' validates {got}.", S.MEDIUM, connector=aud, apim=got))
+    for st in (Status.FAIL, Status.NOT_VERIFIED):
+        for v in out:
+            if v.status is st:
+                return v
+    return out[0]
+
+
+AUDIENCE = NodeRule(
+    _meta(
+        id="ASA-AUTHZ-004",
+        version="1.0",
+        title="Token audience requested by the connector equals the audience APIM validates",
+        severity=S.MEDIUM,
+        area="powerplatform.connectors",
+        impact="Mismatched audiences mean tokens are either rejected or accepted from a different application than intended.",
+        recommendation="Align the connector ResourceUri with the audience in the APIM validate-jwt policy.",
+        refs=(req("OAuth 2.0 (RFC 6749/8707): audience restriction"),),
+    ),
+    selector("connector"),
+    _audience_match,
+)
+
+
 ALL_RULES: list[Rule] = [
+    USER_PROPAGATION,
+    APP_SECRET,
+    AUDIENCE,
     RBAC,
     SQL_AAD,
     STORAGE_PUBLIC,
