@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import json
 import socketserver
 import sys
 from pathlib import Path
 
+from asa import trust_path
 from asa.agent import MockAgent
 from asa.alerts import FileNotifier, alert_new_high
 from asa.engine import Assessment, run
@@ -54,7 +56,9 @@ def _emit(a: Assessment, out: Path, drift=None, expl: str | None = None) -> None
     if expl is None and a.snapshot.mode == "fixture":
         expl = MockAgent().explain(a)
     base.with_suffix(".html").write_text(to_html(a, drift, expl), encoding="utf-8")
-    base.with_suffix(".md").write_text(to_markdown(a, drift), encoding="utf-8")
+    tp = trust_path.build(a.snapshot)
+    base.with_suffix(".md").write_text(to_markdown(a, drift) + "\n" + trust_path.to_markdown_section(tp), encoding="utf-8")
+    (out / f"{a.snapshot.label}.trust-path.json").write_text(json.dumps(tp, indent=2, default=str), encoding="utf-8")
     base.with_suffix(".json").write_text(to_json(a), encoding="utf-8")
     print(f"  wrote {base}.html/.md/.json  coverage={a.coverage_pct}%  {dict(a.by_status())}")
 

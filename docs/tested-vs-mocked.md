@@ -44,3 +44,12 @@ Upstream hops (operator → Copilot Studio → connector → APIM) are `unknown`
 - FoundryAgent (gpt-4.1-mini on shared-lab-foundry) was called live twice from the owner's login and once from the Azure job under the ASA managed identity (one `Cognitive Services OpenAI User` assignment on the account).
 - First live call was rejected by citation validation (model shortened asset ids); fixed by giving each finding an exact `cite` string. Wrong or missing citations still reject the whole narrative and the report shows a note instead.
 - The model never changes a verdict; verdicts come only from deterministic rules. Narrative quality (completeness, tone) is not graded by any test.
+
+## Phase 2 additions (2026-11-22)
+| Capability | Verified live | Simulated / not verified |
+|---|---|---|
+| Entra, Power Platform, Power Automate collectors (GET only) | yes, under owner login | cloud job does NOT run them (no broad consent, by decision) |
+| Dataverse `bots` (Copilot agent) | no: 403, principal is an unlicensed administrator (privileges filtered) | agent -> connector edge stays `inferred` |
+| Grafana metrics push (counts only) | yes, HTTP 204; dashboard provisioned by owner | scheduled job does not push yet |
+| Key Vault `kv-asa-40094918` | yes, secret present (value never read by ASA code) | rotation alert not yet built |
+| Trust-path report (`*.trust-path.json`) | edges labelled from live evidence | business authorization is always `not_proven` |

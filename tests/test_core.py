@@ -140,3 +140,15 @@ def test_det001_unobserved_sentinel_is_not_a_fail() -> None:
             n.props["defender_plans_enabled"], n.props["sentinel_present"] = False, None
     f = next(x for x in run(s).findings if x.rule_id == "ASA-DET-001")
     assert f.status is Status.NOT_VERIFIED
+
+
+def test_trust_path_labels_every_hop_and_never_claims_authorization() -> None:
+    from asa import trust_path
+
+    t = trust_path.build(insecure())
+    assert t["paths"] and all(p["business_authorization"] == "not_proven" for p in t["paths"])
+    assert all(h["basis"] in ("confirmed", "inferred", "unknown") for p in t["paths"] for h in p["hops"])
+    s = secure()
+    s.edges[0].basis = Basis.UNKNOWN
+    t2 = trust_path.build(s)
+    assert t2["edge_counts"]["unknown"] >= 1 and any(h["to_confirm"] for h in t2["open_hops"])
