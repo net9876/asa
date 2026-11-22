@@ -152,3 +152,13 @@ def test_trust_path_labels_every_hop_and_never_claims_authorization() -> None:
     s.edges[0].basis = Basis.UNKNOWN
     t2 = trust_path.build(s)
     assert t2["edge_counts"]["unknown"] >= 1 and any(h["to_confirm"] for h in t2["open_hops"])
+
+
+def test_telemetry_report_marks_unobserved_as_unknown_and_never_verifies_correlation() -> None:
+    from asa import telemetry
+
+    t = telemetry.build(unobservable())
+    assert t["correlation"]["verified"] is False
+    assert all(r["state"] in ("configured", "missing", "unknown") for r in t["sources"])
+    assert any(r["state"] == "unknown" for r in t["sources"])
+    assert "Telemetry coverage" in telemetry.to_markdown_section(t)

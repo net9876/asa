@@ -210,6 +210,7 @@ class AzureArmCollector:
         idents = self._identities(base)
         self._role_assignments(idents)
         self._diagnostics(by_type)
+        self._telemetry(by_type)
         self._foundry()
         self._link(apim_apis, funcs, idents)
         if self.overlay:
@@ -456,6 +457,100 @@ class AzureArmCollector:
                 continue
             n.props["diagnostics_enabled"] = any(x.get("properties", {}).get("workspaceId") for x in ds.get("value", []))
             n.props["diagnostics_sink"] = "Log Analytics workspace"
+            detail = []
+            for x in ds.get("value", []):
+                p = x.get("properties", {})
+                detail.append(
+                    {
+                        "name": x.get("name"),
+                        "workspace_id": (p.get("workspaceId") or "").lower() or None,
+                        "other_destinations": [k for k in ("storageAccountId", "eventHubAuthorizationRuleId") if p.get(k)],
+                        "log_categories": sorted(
+                            (lg.get("category") or lg.get("categoryGroup") or "?") for lg in p.get("logs", []) if lg.get("enabled")
+                        ),
+                        "metrics_enabled": any(m.get("enabled") for m in p.get("metrics", [])),
+                    }
+                )
+            n.props["diag_detail"] = detail
+
+    def _telemetry(self, by_type: dict[str, list[dict[str, Any]]]) -> None:
+        """Telemetry COVERAGE only (config + retention). Reading log contents/freshness is a separate scope."""
+        ws_ids: set[str] = set()
+        for n in self.snap.nodes:
+            for d in n.props.get("diag_detail") or []:
+                if d.get("workspace_id"):
+                    ws_ids.add(d["workspace_id"])
+        for c in by_type.get("microsoft.insights/components", []):
+            comp = self._try("arm.telemetry.appinsights", lambda c=c: self.arm.get(c["id"], "2020-02-02"))
+            if comp is None:
+                continue
+            p = comp.get("properties", {})
+            wid = (p.get("WorkspaceResourceId") or "").lower() or None
+            if wid:
+                ws_ids.add(wid)
+            self._node(
+                c["id"],
+                "resource",
+                c["name"],
+                "GET Microsoft.Insights/components",
+                kind="appinsights",
+                workspace_id=wid,
+                retention_days=p.get("RetentionInDays"),
+                ingestion_mode=p.get("IngestionMode"),
+                public_ingestion=p.get("publicNetworkAccessForIngestion"),
+                public_query=p.get("publicNetworkAccessForQuery"),
+                sampling_pct=p.get("SamplingPercentage"),
+            )
+        for wid in sorted(ws_ids):
+            ws = self._try("arm.telemetry.workspace", lambda wid=wid: self.arm.get(wid, "2023-09-01"))
+            if ws is None:
+                continue
+            p = ws.get("properties", {})
+            self._node(
+                wid,
+                "resource",
+                ws.get("name", wid),
+                "GET Microsoft.OperationalInsights/workspaces",
+                kind="log-workspace",
+                retention_days=p.get("retentionInDays"),
+                sku=(p.get("sku") or {}).get("name"),
+                daily_cap_gb=(p.get("workspaceCapping") or {}).get("dailyQuotaGb"),
+                public_query=p.get("publicNetworkAccessForQuery"),
+            )
+        kinds = (
+            "microsoft.insights/metricalerts",
+            "microsoft.insights/scheduledqueryrules",
+            "microsoft.insights/activitylogalerts",
+            "microsoft.alertsmanagement/smartdetectoralertrules",
+        )
+        self._node(
+            f"{self.snap.scope}/telemetry-alerts",
+            "resource",
+            "Alert rules in scope",
+            "GET /resources (type counts)",
+            kind="alert-rules",
+            **{k.split("/")[1]: len(by_type.get(k, [])) for k in kinds},
+        )
+        for n in self.snap.nodes:
+            if n.props.get("kind") == "apim-service":
+                lg = self._try("arm.telemetry.apim", lambda n=n: self.arm.get(f"{n.id}/loggers", "2022-08-01"))
+                if lg is not None:
+                    n.props["apim_loggers"] = [x.get("properties", {}).get("loggerType") for x in lg.get("value", [])]
+        self._gap(
+            "telemetry.log_freshness",
+            "NOT_COLLECTED",
+            "Whether logs actually arrive, and correlation-ID joins, need Log Analytics Reader on the workspace (not granted).",
+        )
+        self._gap(
+            "telemetry.entra_logs",
+            "NOT_COLLECTED",
+            "Entra sign-in/audit log coverage needs AuditLog.Read.All (tenant consent, not requested).",
+        )
+        self._gap(
+            "telemetry.powerplatform_audit",
+            "NOT_COLLECTED",
+            "Power Platform / Dataverse audit state needs Dataverse audit settings read; not collected in this version.",
+        )
 
     def _foundry(self) -> None:
         if not self.foundry:
