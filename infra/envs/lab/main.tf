@@ -43,6 +43,11 @@ variable "enable_keyvault" {
   type    = bool
   default = false
 }
+variable "optional_role_assignments" {
+  type        = map(object({ scope = string, role = string }))
+  default     = {}
+  description = "Extra READ roles for ASA's identity (e.g. Log Analytics Reader). Write roles are rejected by the module."
+}
 variable "scan_cron" {
   type    = string
   default = "0 6 * * *"
@@ -65,6 +70,8 @@ module "asa" {
   scheduler_bootstrap  = var.scheduler_bootstrap
   scan_cron            = var.scan_cron
   enable_keyvault      = var.enable_keyvault
+
+  optional_role_assignments = var.optional_role_assignments
 }
 
 output "asa" {
