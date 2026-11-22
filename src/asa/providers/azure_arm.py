@@ -590,7 +590,7 @@ class AzureArmCollector:
             self._gap(area, "NOT_COLLECTED", "Overlay disabled; no collector for this area")
 
 
-def collect_from_config(path: Path) -> Snapshot:
+def collect_from_config(path: Path, arm: ReadOnlyArm | None = None) -> Snapshot:
     cfg = tomllib.loads(path.read_text(encoding="utf-8"))
     t = cfg["target"]
     return AzureArmCollector(
@@ -600,4 +600,5 @@ def collect_from_config(path: Path) -> Snapshot:
         cfg.get("options", {}).get("declared_overlay", True),
         foundry_deployments=t.get("foundry_deployments"),
         use_resource_graph=cfg.get("options", {}).get("use_resource_graph", False),
+        arm=arm,
     ).collect()

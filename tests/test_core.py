@@ -131,3 +131,12 @@ def test_evidence_roundtrip_json() -> None:
     a = run(insecure())
     s2 = Snapshot.from_dict(a.snapshot.to_dict())
     assert len(s2.nodes) == len(a.snapshot.nodes) and isinstance(Evidence, type)
+
+
+def test_det001_unobserved_sentinel_is_not_a_fail() -> None:
+    s = secure()
+    for n in s.nodes:
+        if n.props.get("kind") == "subscription":
+            n.props["defender_plans_enabled"], n.props["sentinel_present"] = False, None
+    f = next(x for x in run(s).findings if x.rule_id == "ASA-DET-001")
+    assert f.status is Status.NOT_VERIFIED

@@ -57,8 +57,14 @@ variable "enable_scheduler" {
   description = "Container Apps environment + cron job that runs the live scan (consumption plan; near-zero when idle). Off by default."
 }
 variable "scheduler_image" {
-  type    = string
-  default = null
+  type        = string
+  default     = "docker.io/library/python:3.12-slim"
+  description = "Public base image. ASA code is pulled at start from ASA's own storage (bootstrap/asa.zip) with the job identity: no registry needed."
+}
+variable "scheduler_bootstrap" {
+  type        = string
+  default     = ""
+  description = "Inline python stub that downloads bootstrap/asa.zip + config and runs `asa scan --live --auth msi --upload`."
 }
 variable "scan_cron" {
   type    = string
@@ -203,7 +209,11 @@ resource "azurerm_container_app_job" "scan" {
       image   = var.scheduler_image
       cpu     = 0.25
       memory  = "0.5Gi"
-      command = ["python", "-m", "asa.cli", "scan", "--live"]
+      command = ["python", "-c", var.scheduler_bootstrap]
+      env {
+        name  = "ASA_STORE_URL"
+        value = "${azurerm_storage_account.findings.primary_blob_endpoint}${azurerm_storage_container.snapshots.name}"
+      }
       env {
         name  = "AZURE_CLIENT_ID"
         value = azurerm_user_assigned_identity.asa.client_id

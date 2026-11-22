@@ -51,7 +51,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.live:
         from asa.providers.azure_arm import collect_from_config
 
-        snap = collect_from_config(Path(args.config))
+        arm = None
+        if args.auth == "msi":
+            from asa.providers.azure_arm import ReadOnlyArm
+            from asa.providers.msi import MsiArmRunner
+
+            arm = ReadOnlyArm(MsiArmRunner())
+        snap = collect_from_config(Path(args.config), arm)
     else:
         snap = FIXTURES[args.fixture]()
     a = run(snap)
@@ -59,7 +65,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
     prev = store.latest(snap.label)
     d = diff(prev, a) if prev else None
     _emit(a, out, d)
-    store.save(a)
+    saved = store.save(a)
+    if args.upload:
+        from asa.providers.msi import upload_dir
+
+        stamp = a.snapshot.taken_at.replace(":", "").replace("-", "")
+        names = upload_dir(args.upload, f"results/{stamp}", [saved, *sorted(p for p in out.glob(f"{snap.label}.*") if p.is_file())])
+        print(f"  uploaded to ASA findings store: {', '.join(names)}")
     if d:
         print(f"  drift: {len(d.new_failures)} new, {len(d.resolved)} resolved, {len(d.alertable)} alertable")
         if args.alerts:
@@ -90,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--fixture", choices=sorted(FIXTURES), default="insecure")
     sc.add_argument("--live", action="store_true", help="read-only Azure collection (needs az login + config)")
     sc.add_argument("--config", default="config/minibank.local.toml")
+    sc.add_argument("--auth", choices=["az", "msi"], default="az", help="credential source for --live")
+    sc.add_argument("--upload", help="blob container URL of ASA's own findings store (managed identity)")
     sc.add_argument("--alerts", action="store_true", help="opt in: write alerts for new high/critical findings")
     sc.set_defaults(fn=cmd_scan)
     sv = sub.add_parser("serve")

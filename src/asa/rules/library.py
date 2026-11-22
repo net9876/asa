@@ -482,6 +482,8 @@ def _signals(n: Node, _: Snapshot) -> Verdict:
         return unknown("Defender/Sentinel state not observed. ASA works without them; this is informational.")
     if d or s:
         return passed("Optional Microsoft security signals present.", defender_plans_enabled=d, sentinel_present=s)
+    if d is None or s is None:  # one signal absent, the other unobservable: cannot claim "neither"
+        return unknown("One of Defender/Sentinel is absent and the other was not observed.", defender_plans_enabled=d, sentinel_present=s)
     return failed(
         "Neither Defender plans nor Sentinel are present. ASA does not need them, but no independent detection/response exists.",
         S.LOW,
