@@ -1,37 +1,390 @@
 {
   "title": "ASA - Security audit overview",
   "uid": "asa-overview",
-  "tags": ["asa", "read-only-auditor"],
+  "tags": [
+    "asa",
+    "read-only-auditor"
+  ],
   "timezone": "utc",
   "schemaVersion": 39,
-  "time": { "from": "now-7d", "to": "now" },
-  "templating": { "list": [
-    { "name": "DS", "type": "datasource", "query": "prometheus", "label": "Data source" },
-    { "name": "scope", "type": "query", "datasource": { "type": "prometheus", "uid": "${DS}" },
-      "query": "label_values(asa_audit_coverage_pct, scope)", "refresh": 2, "label": "Scope" }
-  ] },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS",
+        "type": "datasource",
+        "query": "prometheus",
+        "label": "Data source"
+      },
+      {
+        "name": "scope",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS}"
+        },
+        "query": "label_values(asa_audit_coverage_pct, scope)",
+        "refresh": 2,
+        "label": "Scope"
+      }
+    ]
+  },
   "panels": [
-    { "id": 1, "type": "gauge", "title": "Audit completeness (verified PASS/FAIL, %)", "gridPos": {"h":7,"w":6,"x":0,"y":0},
-      "datasource": {"type":"prometheus","uid":"${DS}"},
-      "fieldConfig": {"defaults": {"min":0,"max":100,"unit":"percent","thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"orange","value":60},{"color":"green","value":85}]}}},
-      "targets": [{"expr":"last_over_time(asa_audit_coverage_pct{scope=~\"$scope\"}[1d])","refId":"A"}] },
-    { "id": 2, "type": "stat", "title": "Status now", "gridPos": {"h":7,"w":18,"x":6,"y":0},
-      "datasource": {"type":"prometheus","uid":"${DS}"},
-      "options": {"colorMode":"background","graphMode":"none","textMode":"value_and_name"},
-      "targets": [{"expr":"last_over_time(asa_status_count{scope=~\"$scope\"}[1d])","legendFormat":"{{status}}","refId":"A"}] },
-    { "id": 3, "type": "timeseries", "title": "History: findings by status", "gridPos": {"h":8,"w":12,"x":0,"y":7},
-      "datasource": {"type":"prometheus","uid":"${DS}"},
-      "targets": [{"expr":"asa_status_count{scope=~\"$scope\"}","legendFormat":"{{status}}","refId":"A"}] },
-    { "id": 4, "type": "timeseries", "title": "History: audit completeness %", "gridPos": {"h":8,"w":12,"x":12,"y":7},
-      "datasource": {"type":"prometheus","uid":"${DS}"},
-      "targets": [{"expr":"asa_audit_coverage_pct{scope=~\"$scope\"}","legendFormat":"{{scope}}","refId":"A"}] },
-    { "id": 5, "type": "table", "title": "FAIL by rule and severity (latest)", "gridPos": {"h":9,"w":12,"x":0,"y":15},
-      "datasource": {"type":"prometheus","uid":"${DS}"},
-      "targets": [{"expr":"last_over_time(asa_findings_count{scope=~\"$scope\",status=\"FAIL\"}[1d])","format":"table","instant":true,"refId":"A"}] },
-    { "id": 6, "type": "table", "title": "NOT_VERIFIED by rule (visibility gaps, latest)", "gridPos": {"h":9,"w":12,"x":12,"y":15},
-      "datasource": {"type":"prometheus","uid":"${DS}"},
-      "targets": [{"expr":"last_over_time(asa_findings_count{scope=~\"$scope\",status=\"NOT_VERIFIED\"}[1d])","format":"table","instant":true,"refId":"A"}] },
-    { "id": 7, "type": "text", "title": "About", "gridPos": {"h":3,"w":24,"x":0,"y":24},
-      "options": {"mode":"markdown","content":"ASA is a read-only auditor. NOT_VERIFIED means missing evidence, never PASS. This dashboard holds counts only; evidence stays in ASA's private Azure Blob store."} }
+    {
+      "id": 1,
+      "type": "gauge",
+      "title": "Audit completeness (verified PASS/FAIL, %)",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "green",
+                "value": 85
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "last_over_time(asa_audit_coverage_pct{scope=~\"$scope\"}[1d])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Status now",
+      "gridPos": {
+        "h": 7,
+        "w": 18,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "last_over_time(asa_status_count{scope=~\"$scope\"}[1d])",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "FAIL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NOT_VERIFIED"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PASS"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NOT_APPLICABLE"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "gray"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "History: findings by status",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "targets": [
+        {
+          "expr": "last_over_time(asa_status_count{scope=~\"$scope\"}[25h])",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "FAIL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NOT_VERIFIED"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PASS"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NOT_APPLICABLE"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "gray"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "History: audit completeness %",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "targets": [
+        {
+          "expr": "last_over_time(asa_audit_coverage_pct{scope=~\"$scope\"}[25h])",
+          "legendFormat": "{{scope}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "FAIL by rule and severity (latest)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "targets": [
+        {
+          "expr": "last_over_time(asa_findings_count{scope=~\"$scope\",status=\"FAIL\"}[1d])",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "_name_": true,
+              "__proxy_source__": true,
+              "_proxy_source_": true,
+              "mode": true,
+              "scope": true
+            },
+            "renameByName": {
+              "Value": "count"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "NOT_VERIFIED by rule (visibility gaps, latest)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "targets": [
+        {
+          "expr": "last_over_time(asa_findings_count{scope=~\"$scope\",status=\"NOT_VERIFIED\"}[1d])",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "_name_": true,
+              "__proxy_source__": true,
+              "_proxy_source_": true,
+              "mode": true,
+              "scope": true
+            },
+            "renameByName": {
+              "Value": "count"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "About",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "ASA is a read-only auditor. NOT_VERIFIED means missing evidence, never PASS. This dashboard holds counts only; evidence stays in ASA's private Azure Blob store."
+      }
+    }
   ]
 }
