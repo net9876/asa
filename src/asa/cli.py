@@ -16,10 +16,43 @@ from asa.store import Store, diff
 from asa.synthetic import FIXTURES
 
 
-def _emit(a: Assessment, out: Path, drift=None) -> None:  # type: ignore[no-untyped-def]
+def _agent_enabled(config: Path) -> bool:
+    import tomllib
+
+    return bool(tomllib.loads(config.read_text(encoding="utf-8")).get("agent", {}).get("enabled", False))
+
+
+def _narrative(a: Assessment, config: Path, auth: str) -> str:
+    """Optional model explanation. Never affects verdicts; any failure degrades to a visible note."""
+    import tomllib
+
+    cfg = tomllib.loads(config.read_text(encoding="utf-8")).get("agent")
+    if not cfg:
+        return "No [agent] section in config: no model explanation requested."
+    try:
+        if auth == "msi":
+            from asa.providers.msi import msi_token
+
+            token = msi_token("https://cognitiveservices.azure.com/")
+        else:
+            from asa.providers.azure_arm import _az_runner
+
+            rc, out, err = _az_runner(["account", "get-access-token", "--resource", "https://cognitiveservices.azure.com", "--query", "accessToken", "-o", "tsv"])
+            if rc != 0:
+                raise RuntimeError(err.splitlines()[-1] if err else "az token failed")
+            token = out.strip()
+        from asa.agent import FoundryAgent
+
+        return FoundryAgent(cfg["endpoint"], cfg["deployment"], token).explain(a)
+    except Exception as e:  # network, auth, model output rejected: report, never guess
+        return f"Model explanation unavailable ({type(e).__name__}: {str(e)[:200]}). Deterministic findings above are unaffected."
+
+
+def _emit(a: Assessment, out: Path, drift=None, expl: str | None = None) -> None:  # type: ignore[no-untyped-def]
     out.mkdir(parents=True, exist_ok=True)
     base = out / a.snapshot.label
-    expl = MockAgent().explain(a) if a.snapshot.mode == "fixture" else None
+    if expl is None and a.snapshot.mode == "fixture":
+        expl = MockAgent().explain(a)
     base.with_suffix(".html").write_text(to_html(a, drift, expl), encoding="utf-8")
     base.with_suffix(".md").write_text(to_markdown(a, drift), encoding="utf-8")
     base.with_suffix(".json").write_text(to_json(a), encoding="utf-8")
@@ -64,7 +97,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
     store = Store(Path(args.data) / "history")
     prev = store.latest(snap.label)
     d = diff(prev, a) if prev else None
-    _emit(a, out, d)
+    expl = _narrative(a, Path(args.config), args.auth) if args.live and (args.explain or _agent_enabled(Path(args.config))) else None
+    _emit(a, out, d, expl)
     saved = store.save(a)
     if args.upload:
         from asa.providers.msi import upload_dir
@@ -103,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--live", action="store_true", help="read-only Azure collection (needs az login + config)")
     sc.add_argument("--config", default="config/minibank.local.toml")
     sc.add_argument("--auth", choices=["az", "msi"], default="az", help="credential source for --live")
+    sc.add_argument("--explain", action="store_true", help="add a Foundry model narrative ([agent] in config); read-only, citations validated")
     sc.add_argument("--upload", help="blob container URL of ASA's own findings store (managed identity)")
     sc.add_argument("--alerts", action="store_true", help="opt in: write alerts for new high/critical findings")
     sc.set_defaults(fn=cmd_scan)

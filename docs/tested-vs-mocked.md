@@ -39,3 +39,8 @@ Upstream hops (operator → Copilot Studio → connector → APIM) are `unknown`
 3. Run `FoundryAgent` against the reused account; evaluate explanation quality with a citation-validated test set.
 4. Hosted dashboard + scheduler (Terraform options exist, off by default); immutable evidence storage.
 5. Providers: AWS Bedrock/AgentCore, MCP servers, other agent platforms.
+
+## Update 2026-11-22: model narrative verified live
+- FoundryAgent (gpt-4.1-mini on shared-lab-foundry) was called live twice from the owner's login and once from the Azure job under the ASA managed identity (one `Cognitive Services OpenAI User` assignment on the account).
+- First live call was rejected by citation validation (model shortened asset ids); fixed by giving each finding an exact `cite` string. Wrong or missing citations still reject the whole narrative and the report shows a note instead.
+- The model never changes a verdict; verdicts come only from deterministic rules. Narrative quality (completeness, tone) is not graded by any test.

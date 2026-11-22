@@ -9,3 +9,9 @@ resource_group = "rg-minibank-lab"
 [options]
 declared_overlay = true   # add Copilot Studio / Power Platform nodes from design docs, labelled declared/unknown
 use_resource_graph = false  # true adds an Azure Resource Graph inventory cross-check (POST query, read-only)
+
+# optional: model narrative via Foundry (needs one Cognitive Services OpenAI User assignment on the account)
+# [agent]
+# enabled = true
+# endpoint = "https://<account>.cognitiveservices.azure.com/openai/v1"
+# deployment = "gpt-4.1-mini"
