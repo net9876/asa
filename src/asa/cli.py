@@ -106,11 +106,33 @@ def cmd_scan(args: argparse.Namespace) -> int:
         stamp = a.snapshot.taken_at.replace(":", "").replace("-", "")
         names = upload_dir(args.upload, f"results/{stamp}", [saved, *sorted(p for p in out.glob(f"{snap.label}.*") if p.is_file())])
         print(f"  uploaded to ASA findings store: {', '.join(names)}")
+    if args.metrics or args.push_metrics:
+        _metrics(a, out, Path(args.config), args.push_metrics)
     if d:
         print(f"  drift: {len(d.new_failures)} new, {len(d.resolved)} resolved, {len(d.alertable)} alertable")
         if args.alerts:
             alert_new_high(d, FileNotifier(out / "alerts.jsonl"))
     return 0
+
+
+def _metrics(a: Assessment, out: Path, cfg: Path, push_it: bool) -> None:
+    import os
+    import time
+    import tomllib
+
+    from asa import metrics
+
+    lines = metrics.to_lines(a, time.time_ns())
+    (out / "metrics.lines").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  metrics: {len(lines)} summary lines (counts only) -> {out / 'metrics.lines'}  [dry run]")
+    if not push_it:
+        return
+    g = tomllib.loads(cfg.read_text(encoding="utf-8")).get("grafana", {}) if cfg.exists() else {}
+    token = os.environ.get("GRAFANA_PUSH_TOKEN", "")
+    if not (g.get("push_url") and g.get("metrics_user") and token):
+        print("  metrics NOT pushed: need [grafana] push_url + metrics_user in config and GRAFANA_PUSH_TOKEN in env")
+        return
+    print(f"  metrics pushed: HTTP {metrics.push(lines, g['push_url'], str(g['metrics_user']), token)}")
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -138,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--config", default="config/minibank.local.toml")
     sc.add_argument("--auth", choices=["az", "msi"], default="az", help="credential source for --live")
     sc.add_argument("--explain", action="store_true", help="add a Foundry model narrative ([agent] in config); read-only, citations validated")
+    sc.add_argument("--metrics", action="store_true", help="write summary metrics (counts only) for Grafana; dry run")
+    sc.add_argument("--push-metrics", action="store_true", help="also push them to Grafana Cloud ([grafana] config + GRAFANA_PUSH_TOKEN)")
     sc.add_argument("--upload", help="blob container URL of ASA's own findings store (managed identity)")
     sc.add_argument("--alerts", action="store_true", help="opt in: write alerts for new high/critical findings")
     sc.set_defaults(fn=cmd_scan)
