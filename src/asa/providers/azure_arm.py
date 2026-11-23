@@ -513,6 +513,7 @@ class AzureArmCollector:
                 "GET Microsoft.OperationalInsights/workspaces",
                 kind="log-workspace",
                 retention_days=p.get("retentionInDays"),
+                customer_id=p.get("customerId"),
                 sku=(p.get("sku") or {}).get("name"),
                 daily_cap_gb=(p.get("workspaceCapping") or {}).get("dailyQuotaGb"),
                 public_query=p.get("publicNetworkAccessForQuery"),
@@ -539,7 +540,7 @@ class AzureArmCollector:
         self._gap(
             "telemetry.log_freshness",
             "NOT_COLLECTED",
-            "Whether logs actually arrive, and correlation-ID joins, need Log Analytics Reader on the workspace (not granted).",
+            "Log freshness and correlation need read access to the workspace (Log Analytics Reader); not collected unless that check succeeds.",
         )
         self._gap(
             "telemetry.entra_logs",
@@ -709,4 +710,9 @@ def collect_from_config(path: Path, arm: ReadOnlyArm | None = None, token_for: C
             entra=bool((en or {}).get("enabled", False)),
             app_name_prefix=(en or {}).get("app_name_prefix"),
         ).collect()
+    if cfg.get("options", {}).get("log_freshness", True):
+        from asa.providers import logs
+        from asa.providers.saas import az_token
+
+        logs.collect(snap, logs.make_client(token_for or az_token))
     return snap

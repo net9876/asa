@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from asa.models import Snapshot
+from asa.providers.logs import STALE_AFTER_HOURS
 
 
 def _state(v: bool | None) -> str:
@@ -51,6 +52,18 @@ def build(s: Snapshot) -> dict[str, Any]:
                     "daily_cap_gb": n.props.get("daily_cap_gb"),
                 }
             )
+            for f in n.props.get("freshness") or []:
+                age = f.get("age_hours")
+                rows.append(
+                    {
+                        "source": "log-freshness",
+                        "asset": f"{n.name}/{f.get('table')}",
+                        "state": "unknown" if age is None else ("fresh" if age <= STALE_AFTER_HOURS else "stale"),
+                        "last_ingest": f.get("last_ingest"),
+                        "age_hours": age,
+                        "rows_7d": f.get("rows_7d"),
+                    }
+                )
         elif k == "alert-rules":
             total = sum(v for key, v in n.props.items() if key != "kind" and isinstance(v, int))
             rows.append(
@@ -90,8 +103,12 @@ def build(s: Snapshot) -> dict[str, Any]:
         "not_verified": unknown,
         "correlation": {
             "configured_end_to_end": chain_ready,
-            "verified": False,
-            "note": "Correlation-ID joins across APIM, Function and SQL cannot be verified without read access to the log store.",
+            "verified": False,  # end-to-end (APIM -> Function -> SQL) is never claimed from partial evidence
+            "observed_in_app_insights": next((n.props["correlation"] for n in s.nodes if n.props.get("correlation")), None),
+            "note": (
+                "observed_in_app_insights = request ids that also appear in dependency/trace records (aggregate counts). "
+                "End-to-end correlation across APIM, Function and SQL is not verified: APIM gateway logs must also be present."
+            ),
         },
     }
 
@@ -104,5 +121,5 @@ def to_markdown_section(t: dict[str, Any]) -> str:
     if t["not_verified"]:
         out += ["", "Not verified:"] + [f"- {u['source']} [{u['reason']}] {u['why']}" for u in t["not_verified"]]
     c = t["correlation"]
-    out += ["", f"Correlation: configured end-to-end={c['configured_end_to_end']}, verified={c['verified']}. {c['note']}"]
+    out += ["", f"Correlation: configured end-to-end={c['configured_end_to_end']}, verified={c['verified']}, observed in App Insights={c['observed_in_app_insights']}. {c['note']}"]
     return "\n".join(out) + "\n"
