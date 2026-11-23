@@ -182,6 +182,11 @@ resource "azurerm_container_app_environment" "asa" {
   location                   = azurerm_resource_group.asa.location
   log_analytics_workspace_id = var.enable_observability ? azurerm_log_analytics_workspace.asa[0].id : null
   tags                       = var.tags
+
+  # Azure adds the default "Consumption" profile itself; do not let the provider try to remove it.
+  lifecycle {
+    ignore_changes = [workload_profile]
+  }
 }
 
 resource "azurerm_container_app_job" "scan" {
@@ -194,6 +199,10 @@ resource "azurerm_container_app_job" "scan" {
   replica_retry_limit          = 1
   tags                         = var.tags
 
+  lifecycle {
+    ignore_changes = [workload_profile_name]
+  }
+
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.asa.id]
@@ -201,6 +210,17 @@ resource "azurerm_container_app_job" "scan" {
 
   schedule_trigger_config {
     cron_expression = var.scan_cron
+  }
+
+  # Grafana push token comes from Key Vault by reference (versionless id, scanner identity has Secrets User).
+  # The value never appears in Terraform, state or the job definition.
+  dynamic "secret" {
+    for_each = var.enable_keyvault ? [1] : []
+    content {
+      name                = "grafana-push-token"
+      identity            = azurerm_user_assigned_identity.asa.id
+      key_vault_secret_id = "${azurerm_key_vault.asa[0].vault_uri}secrets/asa-grafana-push-token"
+    }
   }
 
   template {
@@ -217,6 +237,13 @@ resource "azurerm_container_app_job" "scan" {
       env {
         name  = "AZURE_CLIENT_ID"
         value = azurerm_user_assigned_identity.asa.client_id
+      }
+      dynamic "env" {
+        for_each = var.enable_keyvault ? [1] : []
+        content {
+          name        = "GRAFANA_PUSH_TOKEN"
+          secret_name = "grafana-push-token"
+        }
       }
     }
   }

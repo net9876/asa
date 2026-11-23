@@ -16,4 +16,4 @@ open("/tmp/config.toml", "wb").write(get("bootstrap/config.toml"))
 sys.path.insert(0, "/tmp/app/src")
 from asa.cli import main  # noqa: E402
 
-sys.exit(main(["--out", "/tmp/out", "--data", "/tmp/data", "scan", "--live", "--explain", "--auth", "msi", "--config", "/tmp/config.toml", "--upload", base]))
+sys.exit(main(["--out", "/tmp/out", "--data", "/tmp/data", "scan", "--live", "--explain", "--push-metrics", "--auth", "msi", "--config", "/tmp/config.toml", "--upload", base]))
