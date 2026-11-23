@@ -252,6 +252,7 @@ class SaaSCollector:
         url = f"{FLOW}/providers/Microsoft.ProcessSimple/scopes/admin/environments/{env_id}/v2/flows?api-version=2016-11-01"
         d = self._try("powerplatform.flows", lambda: self.c.get(url, "https://service.flow.microsoft.com"))
         if d is None:
+            self._flows_dataverse()
             return
         self._resolve("powerplatform.flows")
         flows = d.get("value", [])
@@ -265,13 +266,51 @@ class SaaSCollector:
                 writes_data=None, requires_confirmation=None, state=p.get("state"),
                 connections=sorted((p.get("connectionReferences") or {}).keys()) or None,
             )
-        names = [f.get("properties", {}).get("displayName", "") for f in flows]
+        self._flow_match([f.get("properties", {}).get("displayName", "") for f in flows])
+
+    def _flows_dataverse(self) -> None:
+        """Least-privilege fallback: list cloud flows from Dataverse (name/state only; the flow definition is never read)."""
+        if not self.dv:
+            return
+        q = "workflows?$select=name,workflowid,statecode,ismanaged&$filter=category eq 5 and type eq 1&$top=200"
+        rows = self._try("powerplatform.flows", lambda: self.c.pages(f"{self.dv}/api/data/v9.2/{q}"))
+        if rows is None:
+            return
+        self._resolve("powerplatform.flows")
+        pv = self._prov("dataverse", "GET workflows (cloud flows; name/state only)")
+        for r in rows:
+            if r.get("statecode") != 1 or r.get("ismanaged"):
+                continue
+            self._add(
+                f"pp:flow:{r['workflowid']}", "tool", f"Flow · {r.get('name')}", pv,
+                writes_data=None, requires_confirmation=None, state="Started", connections=None,
+            )
+        self._flow_match([r.get("name", "") for r in rows])
+        refs = self._try(
+            "powerplatform.connection_references",
+            lambda: self.c.pages(f"{self.dv}/api/data/v9.2/connectionreferences?$select=connectionreferencelogicalname,connectorid,statecode&$top=200"),
+        )
+        env = self.snap.node("declared:env")
+        if refs is not None and env is not None:
+            env.props["connection_reference_count"] = len(refs)
+            env.props["connection_reference_connectors"] = sorted({str(r.get("connectorid", "")).rsplit("/", 1)[-1] for r in refs})
+        org = self._try(
+            "powerplatform.audit",
+            lambda: self.c.get(f"{self.dv}/api/data/v9.2/organizations?$select=isauditenabled,auditretentionperiodv2", self.dv),
+        )
+        rows_o = (org or {}).get("value", [])
+        if env is not None and rows_o:
+            env.props["dataverse_audit_enabled"] = rows_o[0].get("isauditenabled")
+            env.props["dataverse_audit_retention_days"] = rows_o[0].get("auditretentionperiodv2")
+            self.snap.gaps = [g for g in self.snap.gaps if g.area != "telemetry.powerplatform_audit"]
+
+    def _flow_match(self, names: list[str]) -> None:
         tool = self.snap.node("declared:tool-case")
         if tool is not None:
             tool.props["observed_in_env"] = any("review case" in n.lower() for n in names)
-            tool.props["env_flow_count"] = len(flows)
+            tool.props["env_flow_count"] = len(names)
             if not tool.props["observed_in_env"]:
-                tool.name += f" (declared in design; none of the {len(flows)} flows in the environment matches)"
+                tool.name += f" (declared in design; none of the {len(names)} flows in the environment matches)"
 
     def _agents(self) -> None:
         if not self.dv:

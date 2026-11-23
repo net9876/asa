@@ -64,6 +64,15 @@ def build(s: Snapshot) -> dict[str, Any]:
                         "rows_7d": f.get("rows_7d"),
                     }
                 )
+        elif k == "power-platform-env" and n.props.get("dataverse_audit_enabled") is not None:
+            rows.append(
+                {
+                    "source": "dataverse-audit",
+                    "asset": n.name,
+                    "state": _state(bool(n.props["dataverse_audit_enabled"])),
+                    "retention_days": n.props.get("dataverse_audit_retention_days"),
+                }
+            )
         elif k == "alert-rules":
             total = sum(v for key, v in n.props.items() if key != "kind" and isinstance(v, int))
             rows.append(

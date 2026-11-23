@@ -159,3 +159,42 @@ def test_audience_in_two_forms_of_the_same_app_is_not_a_mismatch() -> None:
     assert next(x for x in run(s).findings if x.rule_id == "ASA-AUTHZ-004").status is Status.PASS
     api.props["audience"] = "some-other-app"
     assert next(x for x in run(s).findings if x.rule_id == "ASA-AUTHZ-004").status is Status.FAIL
+
+
+def test_flows_fall_back_to_dataverse_read_only_when_admin_api_denied() -> None:
+    r = {
+        **ROUTES,
+        "/v2/flows": ArmError("DENIED", "403"),
+        "/workflows?": {
+            "value": [
+                {"workflowid": "w1", "name": "Open review case", "statecode": 1, "ismanaged": False},
+                {"workflowid": "w2", "name": "Draft flow", "statecode": 0, "ismanaged": False},
+            ]
+        },
+        "/connectionreferences": {"value": [{"connectorid": "/providers/Microsoft.PowerApps/apis/shared_x", "statecode": 0}]},
+        "/organizations": {"value": [{"isauditenabled": False, "auditretentionperiodv2": 90}]},
+    }
+    s = _collect(r)
+    assert not any(g.area == "powerplatform.flows" for g in s.gaps)
+    assert [n.name for n in s.nodes if n.id.startswith("pp:flow:")] == ["Flow · Open review case"]  # draft is not active
+    tool = s.node("declared:tool-case")
+    assert tool and tool.props["observed_in_env"] is True
+    env = s.node("declared:env")
+    assert env and env.props["connection_reference_count"] == 1 and env.props["dataverse_audit_enabled"] is False
+    from asa import telemetry
+
+    row = next(x for x in telemetry.build(s)["sources"] if x["source"] == "dataverse-audit")
+    assert row["state"] == "missing"
+
+
+def test_dataverse_fallback_never_selects_flow_definitions() -> None:
+    seen: list[str] = []
+    base = _fake({**ROUTES, "/v2/flows": ArmError("DENIED", "403"), "/workflows?": {"value": []}})
+
+    def fetch(url: str, token: str) -> Any:
+        seen.append(url)
+        return base(url, token)
+
+    SaaSCollector(_snap(), SaaSClient(lambda r: "t", fetch=fetch), environment_id=ENV, dataverse_url="https://org.crm.dynamics.com").collect()
+    wf = [u for u in seen if "/workflows?" in u]
+    assert wf and all("clientdata" not in u for u in wf)
