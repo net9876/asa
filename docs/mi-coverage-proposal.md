@@ -4,6 +4,12 @@ Status 2026-11-23: the job runs as managed identity `id-asa-scanner` and reaches
 owner's interactive login. Everything below is read-only, needs the owner's explicit approval, and is ordered from
 least to most privilege. Items marked (verify) rest on documentation I have not yet confirmed against this tenant.
 
+## Update 2026-11-23: step 1 applied (owner-approved)
+`ASA-Agent-Reader` now has read on Workflow, Connection Reference, Connector and Organization (all `prvRead*`);
+its two inherited SharePoint create/write privileges were removed, so the role is read-only. The job now reads
+cloud flows (name/state only, never the definition), connection reference counts and Dataverse audit settings.
+Verified in job run `job-asa-scan-mo30zgl`. Remaining DENIED for the job: DLP, connector OAuth details, Entra apps.
+
 ## Already working for the job
 - Azure Resource Manager (Reader on `rg-minibank-lab`), Log Analytics (Log Analytics Reader on one workspace).
 - Dataverse `bots` (application user bound to the managed identity, custom read-only role `ASA-Agent-Reader`).
