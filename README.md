@@ -49,3 +49,8 @@ become explicit **evidence gaps**.
 
 Phase 1 (offline MVP) and a first slice of Phase 2 (live ARM collector, graph, drift, alerts) are implemented.
 See [docs/tested-vs-mocked.md](docs/tested-vs-mocked.md) for exactly what is verified live, what is simulated, and what is not built.
+
+## License
+
+[MIT](LICENSE). Do what you like with this code. It comes with no warranty.
+
